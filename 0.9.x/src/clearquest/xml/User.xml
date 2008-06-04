@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<User 
+    xmlns:py="http://genshi.edgewall.org/" py:attrs="ns"
+    Active="${this.Active}"
+    AllUsersVisible="${this.GetUserPrivilege(5)}"
+    AuthenticationMode="${this.GetAuthenticationMode()}"
+    AppBuilder="${this.AppBuilder}"
+    DynamicListAdmin="${this.GetUserPrivilege(1)}"
+    EMail="${this.EMail}"        
+    FullName="${this.FullName}"
+    IsSubscribedToAllDatabases="${this.IsSubscribedToAllDatabases()}"
+    MiscInfo="${this.MiscInfo}"
+    MultiSiteAdmin="${this.GetUserPrivilege(6)}"
+    Name="${this.Name}"
+    Password="${this.password}"
+    PublicFolderAdmin="${this.GetUserPrivilege(2)}"
+    Phone="${this.Phone}"
+    RawSQLWriter="${this.GetUserPrivilege(4)}"
+    SecurityAdmin="${this.GetUserPrivilege(3)}"
+    SiteHasMastership="${this.SiteHasMastership()}"
+    SuperUser="${this.SuperUser}"
+    UserAdmin="${this.GetUserPrivilege(9)}"
+    UserMaintainer="${this.UserMaintainer}">
+    <Groups>
+        <Group py:for="group in this.Groups" Name="${group.Name}"/>
+    </Groups>
+    <SubscribedDatabases>
+        <Database py:for="db in this.SubscribedDatabases" Name="${db.Name}"/>
+    </SubscribedDatabases>
+</User>

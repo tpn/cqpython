@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<EntityDef
+    xmlns:py="http://genshi.edgewall.org/" py:attrs="ns"
+    CanBeSecurityContext="${this.CanBeSecurityContext()}"
+    IsFamily="${this.IsFamily()}"
+    DbName="${this.GetDbName()}"
+    Name="${this.GetName()}"
+    Type="${this.GetType()}">
+    <Fields>
+        <py:for each="name in this.GetFieldDefNames()"
+            py:with="type = this.GetFieldDefType(name);
+                     isRef = type in api.FieldType.referenceTypes;
+                     ref = this.GetFieldReferenceEntityDef(name).GetName()
+                            if isRef else None">
+            <Field
+                DbName="${this.LookupFieldDefDbNameByName(name)}"
+                IsSystemOwned="${this.IsSystemOwnedFieldDefName(name)}"
+                Name="${name}"
+                Type="${type}"
+                TypeName="${api.FieldType[type]}"
+                CanBeSecurityContext="${this.CanBeSecurityContextField(name)}"
+                ReferenceTo="${ref}"/>
+        </py:for>
+    </Fields>
+    <States py:if="this.GetType() == 1">
+        <State py:for="name in this.GetStateDefNames()" Name="${name}"/>
+    </States>
+    <Hooks>
+        <Hook py:for="name in this.GetHookDefNames()" Name="${name}"/>
+    </Hooks>
+    <Actions>
+        <Action py:for="name in this.GetActionDefNames()"
+            Name="${name}"
+            Type="${this.GetActionDefType(name)}"
+            DestState="${this.GetActionDestStateName(name)}">
+            <SourceState py:for="src in this.GetActionSourceStateNames(name)"
+                Name="${src}"/>
+        </Action>
+    </Actions>
+</EntityDef>

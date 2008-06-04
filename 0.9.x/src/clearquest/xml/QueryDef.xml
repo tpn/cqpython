@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<QueryDef
+    xmlns="http://www.onresolve.com/cq/2008.1"
+    xmlns:py="http://genshi.edgewall.org/"
+    dbid="${this.dbid}"
+    IsAggregated="${this.IsAggregated}"
+    IsDirty="${this.IsDirty}"
+    IsMultiType="${this.IsMultiType}"
+    IsSQLGenerated="${this.IsSQLGenerated}"
+    MasterReplicaName="${this.MasterReplicaName}"
+    Name="${this.Name}"
+    PathName="${this.PathName}"
+    PrimaryEntityDefName="${this.GetPrimaryEntityDefName()}"
+    QueryType="${this.QueryType}"
+    SiteExtendedName="${this.SiteExtendedName}"
+    SiteExtendedNameRequired="${this.SiteExtendedNameRequired}"
+    Type="${this.Type}">    
+    <SQL>${this.SQL}</SQL>
+    <QueryFieldDefs>
+        <QueryFieldDef py:for="qfd in this.QueryFieldDefs"
+            AggregateFunction="${qfd.AggregateFunction}"
+            DataType="${qfd.DataType}"
+            Description="${qfd.Description}"
+            FieldPathName="${qfd.FieldPathName}"
+            FieldType="${qfd.FieldType}"
+            Function="${qfd.Function}"
+            IsGroupBy="${qfd.IsGroupBy}"
+            IsLegalForFilter="${qfd.IsLegalForFilter}"
+            IsShown="${qfd.IsShown}"
+            Label="${qfd.Label}"
+            SortOrder="${qfd.SortOrder}"
+            SortType="${qfd.SortType}"
+            py:with="choices = qfd.ChoiceList">
+            <ChoiceList><Value py:for="v in choices">${v}</Value></ChoiceList>
+        </QueryFieldDef>
+    </QueryFieldDefs>
+</QueryDef>

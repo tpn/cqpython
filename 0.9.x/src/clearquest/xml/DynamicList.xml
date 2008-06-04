@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<DynamicList
-    xmlns:py="http://genshi.edgewall.org/" py:attrs="ns"
-    Name="${this.Name}">
-    <Value py:for="value in this">${value}</Value>
-</DynamicList>

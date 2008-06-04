@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Groups
-    xmlns:py="http://genshi.edgewall.org/" py:attrs="ns">
-    <py:for each="group in this">${Markup(group.toXml(ns=None))}</py:for>
-</Groups>

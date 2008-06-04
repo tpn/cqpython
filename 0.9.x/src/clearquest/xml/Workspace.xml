@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Workspace
-    xmlns="http://www.onresolve.com/cq/2008.1"
-    xmlns:py="http://genshi.edgewall.org/"
-    IsRefreshOnGet="${this.IsRefreshOnGet}">
-    <py:for each="folder in this.GetPersonalFolder(), this.GetPublicFolder()">
-        ${Markup(folder.toXml())}
-    </py:for>
-</Workspace>

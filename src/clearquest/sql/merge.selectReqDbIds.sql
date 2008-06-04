@@ -1,0 +1,1 @@
+SELECT dbid FROM %s WHERE dbid <> 0

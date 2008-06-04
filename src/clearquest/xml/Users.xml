@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Users
+    xmlns:py="http://genshi.edgewall.org/" py:attrs="ns">
+    <py:for each="user in this">${Markup(user.toXml(ns=None))}</py:for>
+</Users>

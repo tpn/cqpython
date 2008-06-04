@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Entity
+    xmlns:py="http://genshi.edgewall.org/" py:attrs="ns"
+    dbid="${this.GetDbId()}"
+    DefaultActionName="${this.GetDefaultActionName()}"
+    DisplayName="${this.GetDisplayName()}"
+    EntityDefName="${this.GetEntityDefName()}"
+    IsEditable="${this.IsEditable()}"
+    OriginalId="${this.GetOriginalId() if this.IsDuplicate() else None}"
+    Type="${this.GetType()}">
+    <FieldInfos>       
+        <FieldInfo py:for="f in this.GetAllFieldValues()"
+            py:with="isList = f.GetType() in (1, 2, 3, 4, 5, 8, 9, 11, 12, 13)"
+            MessageText="${f.GetMessageText()}"
+            Name="${f.GetName()}"
+            Type="${f.GetType()}"
+            Requiredness="${f.GetRequiredness()}"
+            ValidationStatus="${f.GetValidationStatus()}"
+            ValueStatus="${f.GetValueStatus()}">
+            <py:choose>
+                <py:when test="isList"><Value>${f.GetValue()}</Value></py:when>
+                <py:otherwise>
+                    <Values>
+                        <Value py:for="v in f.GetValueAsList()">${v}</Value>
+                    </Values>
+                </py:otherwise>
+            </py:choose>
+        </FieldInfo>
+    </FieldInfos>
+</Entity>

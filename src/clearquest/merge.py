@@ -19,8 +19,8 @@ from subprocess import Popen, PIPE
 
 from clearquest import api, db
 from clearquest.task import Task, TaskManagerConfig, MultiSessionTaskManager
-from clearquest.util import connectStringToMap, joinPath, listToMap, unzip, \
-                            exportQueries, updateQueries
+from clearquest.util import connectStringToMap, joinPath, listToMap, unzip
+from clearquest.tools import exportQueries, updateQueries
 from clearquest.constants import EntityType, FieldType, SessionClassType
 
 #===============================================================================
@@ -51,6 +51,16 @@ Oracle    = api.DatabaseVendor.Oracle
 #===============================================================================
 # Decorators
 #===============================================================================
+
+#===============================================================================
+# Source-code Completion Helpers
+#===============================================================================
+if 0:
+    entityDef = session = destSession = sourceSession = None
+    assert isinstance(entityDef, api.EntityDef)
+    assert isinstance(session, api.Session)
+    assert isinstance(destSession, api.Session)
+    assert isinstance(sourceSession, api.Session)
 
 #===============================================================================
 # Helper Methods
@@ -675,7 +685,8 @@ def _mergeAttachments(destSession, sourceSessions, dbidOffsets):
             yield findSql('mergeEntity') % kwds
         
         # Merging attachments_blob only requires one SQL statement per source
-        # session as we join on the attachments table, inserted above.
+        # session, as opposed to one per entity type as above, because we join
+        # on the newly populated attachments table directly.
         srcTables = list()
         srcTables.append('%s.attachments_blob src' % srcPrefix)
         srcTables.append('%s.attachments a1' % dstPrefix)
@@ -946,6 +957,128 @@ def _mergeDatabases(destSession, sourceSessions):
     ]
     
     return '\nGO\n'.join(sql)
+
+def verifyMerge(destSession, sourceSessions, output=sys.stdout):
+    """
+    Verifies the contents of a merged database by checking record counts and
+    comparing the results to the expected record counts.  For stateful entities,
+    the total record count in destSession for each entity is compared to the
+    sum of all record counts for each source session.  For stateless entities,
+    the merge map table is consulted.  The final count in destSession should
+    equal the count of distinct rows for a given entitydef in the merge map.
+    
+    Once all the record count checks are done, a second level of checks are run.
+    These checks attempt to find any entities in one of the source sessions that
+    aren't in destSession when they should be.
+    
+    For stateful entities, this is simply achieved by selecting rows in the 
+    source session for which the row's dbid does not exist in the distinct list
+    of merge_orig_dbid values for a given entitydef.
+    
+    For stateless entities, rows from the source session that do not have a 
+    corresponding row in the destSession are returned. This is done by querying
+    against each stateless entity's unique ID.
+    """
+    
+    targets = [ entityDef for entityDef in destSession.getAllEntityDefs() ] + \
+              [ 'attachments', 'attachments_blob', 'parent_child_links' ]
+    
+    
+    counts = dict()
+    dstPrefix = destSession.getTablePrefix()
+    simpleCountSql = 'SELECT COUNT(*) FROM %s.%s %s'
+    statelessCountSql = findSql('selectStatelessEntityCounts')
+    sessions = [ s for s in chain(sourceSessions, (destSession,)) ]
+    
+    for session in sessions:
+        dbName = session._databaseName
+        prefix = api.getLinkedServerAwareTablePrefix(session, (destSession,))
+        dbc = session.db()
+        assert isinstance(dbc, db.Connection)
+        
+        counts[dbName] = dict()
+        
+        for target in targets:
+            simple = True
+            where = ' WHERE dbid <> 0'
+            if isinstance(target, api.EntityDef):
+                targetName = target.GetName()
+                targetDbName = target.GetDbName()
+                if targetName != 'history' and          \
+                   target.GetType() == Stateless and    \
+                   session is not destSession:
+                    simple = False
+            else:
+                if target in ('parent_child_links', 'attachments_blob'):
+                    where = ''
+                targetName = targetDbName = target
+                
+            if simple:
+                sql = simpleCountSql % (prefix, targetDbName, where)
+                counts[dbName][targetName] = dbc.selectSingle(sql)            
+            else:
+            
+                otherDbIdColumns = [
+                    'm1.%s IS NULL' % _getDbIdColumn(s)
+                        for s in sessions
+                            if s not in (session, destSession)
+                ]
+                
+                sql = statelessCountSql % {
+                    'dstPrefix'        : dstPrefix,
+                    'entityDefId'      : target.id,
+                    'dbDbIdColumn'     : _getDbIdColumn(session),
+                    'otherDbIdColumns' : ' AND\n        '.join(otherDbIdColumns)
+                }
+                counts[dbName][targetName] = dbc.selectSingle(sql)
+    
+    rows = list()
+    
+    for target in [ t if type(t) is str else t.GetName() for t in targets ]:
+        total = 0
+        row = list()
+        row.append(target)
+        
+        for session in sourceSessions:
+            count = counts[session._databaseName][target]
+            row.append(count)
+            total += count 
+        
+        row.append(total)
+        actual = counts[destSession._databaseName][target]
+        row.append(actual)
+        
+        sign = ''
+        diff = actual - total
+        if diff < 0:
+            sign = '-'
+        elif diff > 0:
+            sign = '+'
+        
+        row.append('%s%d' % (sign, total))
+        
+        rows.append(row)
+    
+    columnCount = len([s for s in sourceSessions]) + 3
+    paddings = [ p for p in chain((35,), repeat(11, columnCount)) ]
+    adjust = [ a for a in chain((str.ljust,), repeat(str.rjust, columnCount)) ]
+    
+    header = [ 'Target' ] + \
+             [ s._databaseName for s in sourceSessions ] + \
+             [ 'Total', destSession._databaseName, 'Difference' ]
+    rows.insert(0, header)
+    rows.insert(1, ('',) * len(header))
+    
+    out = \
+        '\n'.join([
+            '|'.join([
+                format(str(column), padding, fill)
+                    for (column, format, padding) in zip(row, adjust, paddings)
+            ]) for (row, fill) in zip(rows, chain((' ', '_'), repeat(' ')))
+        ])
+    return out
+    
+    
         
 def _setPreMergeDatabaseOptions(destSession, *args):
     k = { 'dbName' : destSession.getPhysicalDatabaseName() }
@@ -959,8 +1092,9 @@ def mergeDatabases(destSession, sourceSessions):
     dstDb = destSession.db()
     sql = _mergeDatabases(destSession, sourceSessions)
     
-    for session in sourceSessions:
-        destSession.updateDynamicLists(session.getDynamicLists())
+    destSession.mergeMultipleDynamicListValues([
+        s.getDynamicLists() for s in sourceSessions
+    ])
     
     mergePublicQueries(destSession, sourceSessions)
         
@@ -1036,7 +1170,7 @@ def addMergeFields(adminSession, destSession):
                 
             oldMergeField = '__%s' % mergeField
             if oldMergeField in fields:
-                print "deleting old field '%s' from entity '%s'..." % (   \
+                print "deleting old field '%s' from entity '%s'..." % ( \
                     oldMergeField,
                     entityDefName
                 )
@@ -1054,7 +1188,7 @@ def addMergeFields(adminSession, destSession):
     adminSession.setVisible(True, destSession._databaseName)
 
 def getRecommendedStatefulDbIdOffset(session):
-    maximum = (0, '<entity def name>')
+    maximum = (0, '<entity def name will live here>')
     dbc = session.db()
     for entityDef in session.getStatefulEntityDefs():
         name = entityDef.GetDbName()
@@ -1132,10 +1266,14 @@ def getMaxTableDbIds(sessions):
             firstSession = False
             
         for table in tables:
-            sql = 'SELECT MAX(dbid) FROM %s' % table
-            mx = dbc.selectSingle(sql)
-            if mx > maximum:
-                maximum = mx
+            # XXX: MAKE SURE THIS EXCEPTION BLOCK GETS REMOVED!
+            try:
+                sql = 'SELECT MAX(dbid) FROM %s' % table
+                mx = dbc.selectSingle(sql)
+                if mx > maximum:
+                    maximum = mx
+            except:
+                pass
         
         yield maximum
 
@@ -1177,7 +1315,7 @@ def getMaxIdForField(session, table, column):
 # Classes
 #=============================================================================== 
 
-class MergeConfig(TaskManagerConfig):
+class MergeConfigOld(TaskManagerConfig):
     def __init__(self, manager):
         self.defaultConfigSection = manager.profile
         TaskManagerConfig.__init__(self, manager)

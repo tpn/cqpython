@@ -1,5 +1,8 @@
 """
 clearquest.util: module for any miscellaneous utilities (methods, classes etc)
+This module should not include any of the other modules; it is intended to be
+as light weight as possible.  Miscellaneous utilities that need to include other
+modules should be placed in the clearquest.tools module instead.
 """
 
 #===============================================================================
@@ -15,10 +18,12 @@ from functools import wraps
 from itertools import repeat
 from subprocess import Popen, PIPE
 
-from win32com.client import DispatchBaseClass
+
 from win32api import RegCloseKey, RegOpenKeyEx, RegQueryValueEx
 from win32con import HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE
 
+# Exception to the rule of not including other modules: clearquest.constants is
+# very thin and doesn't include any of the COM stuff.
 from clearquest.constants import CQConstant
 
 #===============================================================================
@@ -33,16 +38,7 @@ __copyright__ = 'Copyright 2008 OnResolve Ltd'
 # Constants
 #===============================================================================
 
-class _BucketStorageType(CQConstant):
-    File      = '-st'
-    Directory = '-di'
-BucketStorageType = _BucketStorageType()
 
-class _BucketToolOperation(CQConstant):
-    Export    = '-e'
-    Import    = '-i'
-    Update    = '-u'
-BucketToolOperation = _BucketToolOperation()
 #===============================================================================
 # Public Helper Methods
 #===============================================================================
@@ -106,7 +102,7 @@ def spliceWork(dataOrSize, nchunks):
     return results
 
 def readRegKey(path, hive=HKEY_LOCAL_MACHINE):
-    path = _cleanPath(path)
+    path = cleanPath(path)
     prefix = path[0:path.rfind('\\')]
     setting = path[len(prefix)+1:]
     try:
@@ -132,60 +128,15 @@ def getRationalInstallDir():
 def getClearQuestInstallationDir():
     return joinPath(getRationalInstallDir(), 'ClearQuest')
 
+def cleanPath(path):
+    """Converts all forward slashes in @param path to back slashes."""
+    return path.replace('/', '\\')
 
-def exportQueries(session, storagePath, storageType=BucketStorageType.File):
-    return _bucketTool(session,
-                       storagePath,
-                       storageType,
-                       BucketToolOperation.Export)
-
-def importQueries(session, storagePath, storageType=BucketStorageType.File):
-    return _bucketTool(session,
-                       storagePath,
-                       storageType,
-                       BucketToolOperation.Import)
-
-def updateQueries(session, storagePath, storageType=BucketStorageType.File):
-    return _bucketTool(session,
-                       storagePath,
-                       storageType,
-                       BucketToolOperation.Update)
-
-#===============================================================================
-# Private Methods
-#===============================================================================
-def _cleanPath(path):
-    if '/' in path:
-        return path.replace('/', '\\')
-    return path
-
-def _getBucketToolExe():
-    path = joinPath(getClearQuestInstallationDir(), 'bkt_tool.exe')
+def findFileInCQDir(file):
+    path = joinPath(getClearQuestInstallationDir(), file)
     if not os.path.isfile(path):
         raise RuntimeError("no such file: %s" % path)
     return path
-
-def _bucketTool(session, storagePath, storageType, operation):
-    """
-    @returns: C{tuple}: (<return code>, <stdout>, <stderr>)
-    """
-    args = (
-        _getBucketToolExe(),
-        operation,
-        '-us',  session._loginName,
-        '-p',   session._password,
-        '-db',  session._databaseName,
-        '-dbs', session._databaseSet,
-        storageType, storagePath,
-    )
-    stdout = StringIO.StringIO()
-    stderr = StringIO.StringIO()
-    p = Popen(args, stdout=PIPE, stderr=PIPE)
-    p.wait()
-    if p.returncode != 0:
-        raise RuntimeError("bkt_tool.exe failed with error code %d: %s" % \
-                           (p.returncode, p.stderr.read()))
-    return
 
 #===============================================================================
 # Decorators
@@ -265,15 +216,4 @@ class Dict(dict):
     def __setattr__(self, name, value):
         return self.__setitem__(name, value)
     
-class CQBaseObject(DispatchBaseClass):
-    def __init__(self, *args, **kwds):
-        for key, value in kwds.items():
-            self.__dict__[key] = value
-        props = self._prop_map_get_.keys()
-        props += [ p for p in self._prop_map_put_.keys() if p not in props ]    
-        module = sys.modules[self.__module__]
-        topLevelObjects = getattr(module, 'TopLevelObjects')
-        if not args and self.__class__.__name__ in topLevelObjects:
-            args = (pythoncom.new(self.coclass_clsid),)
-        DispatchBaseClass.__init__(self, *args)
-        
+

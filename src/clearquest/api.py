@@ -3,15 +3,28 @@
 # By python version 2.5.1 (r251:54863, May  1 2007, 17:47:05) [MSC v.1310 32 bit (Intel)]
 # From type library 'cqole.dll'
 # On Fri Nov 02 19:34:26 2007
-from clearquest.util import connectStringToMap
 """"""
 makepy_version = '0.4.95'
 python_version = 0x20501f0
+
+"""
+clearquest.api: module that wraps the main ClearQuest COM API.
+
+    Created by makepy.py version 0.4.95
+    By python version 2.5.1 (r251:54863, May  1 2007, 17:47:05) [MSC v.1310 32 bit (Intel)]
+    From type library 'cqole.dll'
+    On Fri Nov 02 19:34:26 2007
+"""
+
+#===============================================================================
+# Imports
+#===============================================================================
 
 import os
 import re
 import sys
 import time
+import itertools
 import win32com.client.CLSIDToClass, pythoncom
 import win32com.client.util
 from pywintypes import IID
@@ -22,7 +35,10 @@ from lxml.etree import XML, _Element
 from genshi.template import Context, MarkupTemplate, TemplateLoader, \
                             TemplateNotFound, TextTemplate
 
+# Import both clearquest.db and clearquest.database as we're in the progress of
+# deprecating the former in favour for the latter.
 from clearquest import db
+from clearquest import database
 from clearquest.db import selectAll, selectSingle, getConnectOptionsFromRegistry
 from clearquest.constants import *
 from clearquest.util import cache, concat, connectStringToMap, Dict, iterable, \
@@ -34,6 +50,9 @@ from clearquest.util import cache, concat, connectStringToMap, Dict, iterable, \
 #===============================================================================
 # makepy Globals
 #===============================================================================
+
+makepy_version = '0.4.95'
+python_version = 0x20501f0
 
 # The following 3 lines may need tweaking for the particular server
 # Candidates are pythoncom.Missing, .Empty and .ArgNotFound
@@ -129,11 +148,12 @@ def getLinkedServerAwareTablePrefix(targetSession, otherSessions):
     linked database instances.
     """
     qualify = False
-    us = targetSession.connectStringToMap()['SERVER']
-    for them in [ Session.connectStringToMap(s) for s in otherSessions ]:
-        if them['SERVER'] != us:
-            qualify = True
-            break
+    if targetSession not in otherSessions:
+        us = targetSession.connectStringToMap()['SERVER']
+        for them in [ Session.connectStringToMap(s) for s in otherSessions ]:
+            if them['SERVER'] != us:
+                qualify = True
+                break
         
     prefix = targetSession.getTablePrefix()
     if qualify:
@@ -1218,19 +1238,17 @@ class AdminSession(CQObject):
     @cache
     def getSchema(self, name):
         schemas = self.Schemas
-        i = 0
         found = False
         schema = None
         count = schemas.Count
-        while i < count:
+        for i in xrange(0, schemas.Count):
             schema = schemas[i]
             if schema.Name == name:
                 found = True
                 break
-            i += 1
         
         if not found:
-            raise ValueError, "no schema named '%s' found"
+            raise ValueError, "no schema named '%s' found" % name
         else:
             return schema
         
@@ -4796,6 +4814,8 @@ class Session(CQObject):
     @cache
     def db(self):
         return db.Connection(self)
+    
+    
 
     def lookupEntityDisplayNameByDbId(self, entityDefName, dbid):
         return self.GetEntityDef(entityDefName) \
@@ -4866,7 +4886,14 @@ class Session(CQObject):
     def getDynamicLists(self):
         return loadDynamicLists(self)
     
-    def updateDynamicList(self, dynamicList):
+    def setDynamicListValues(self, dynamicList):
+        """
+        For the list identified by dynamicList.Name, mirror its values for the
+        dynamic list with the same name in this session object.  Values are 
+        added and deleted as necessary.
+        @param dynamicList: C{DynamicList}
+        @returns: the affected C{DynamicList} of this session object.
+        """
         name = dynamicList.Name
         old = self.GetListMembers(name) or tuple()
         new = tuple([ unicode(v) for v in dynamicList.values ])
@@ -4879,8 +4906,29 @@ class Session(CQObject):
         
         return self.getDynamicList(name)
     
-    def updateDynamicLists(self, dynamicLists):
-        return [ self.updateDynamicList(dl) for dl in dynamicLists ]
+    def mergeDynamicListValues(self, dynamicList):
+        """
+        For the list identified by dynamicList.Name, add all the values that 
+        aren't already present to the dynamic list with the same name in this
+        session object.  Does not delete any values.
+        @param dynamicList: C{DynamicList}
+        @returns: the affected C{DynamicList} of this session object. 
+        """
+        name = dynamicList.Name
+        old = self.GetListMembers(name) or tuple()
+        new = tuple([ unicode(v) for v in dynamicList.values ])
+        
+        for value in [ n for n in new if not n in old ]:
+            self.AddListMember(name, value)
+        
+        return self.getDynamicList(name)
+ 
+    
+    def setMultipleDynamicListValues(self, dynamicLists):
+        return [ self.setDynamicListValues(dl) for dl in dynamicLists ]
+    
+    def mergeMultipleDynamicListValues(self, dynamicLists):
+        return [ self.mergeDynamicListValues(dl) for dl in dynamicLists ]
     
     def executeQuery(self, sql):
         r = self.BuildSQLQuery(sql)

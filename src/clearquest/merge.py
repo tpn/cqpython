@@ -991,8 +991,11 @@ def verifyMerge(destSession, sourceSessions, output=sys.stdout):
     sessions = [ s for s in chain(sourceSessions, (destSession,)) ]
     
     for session in sessions:
+        if session is destSession:
+            prefix = dstPrefix
+        else: 
+            prefix = api.getLinkedServerAwareTablePrefix(session,(destSession,))
         dbName = session._databaseName
-        prefix = api.getLinkedServerAwareTablePrefix(session, (destSession,))
         dbc = session.db()
         assert isinstance(dbc, db.Connection)
         

@@ -1048,12 +1048,10 @@ def verifyMerge(destSession, sourceSessions, output=sys.stdout):
         actual = counts[destSession._databaseName][target]
         row.append(actual)
         
-        sign = ''
+        sign = '+'
         diff = actual - total
-        if diff < 0:
-            sign = '-'
-        elif diff > 0:
-            sign = '+'
+        if diff <= 0:
+            sign = ''
         
         row.append('%s%d' % (sign, diff))
         

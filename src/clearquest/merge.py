@@ -991,10 +991,7 @@ def verifyMerge(destSession, sourceSessions, output=sys.stdout):
     sessions = [ s for s in chain(sourceSessions, (destSession,)) ]
     
     for session in sessions:
-        if session is destSession:
-            prefix = dstPrefix
-        else: 
-            prefix = api.getLinkedServerAwareTablePrefix(session,(destSession,))
+        prefix = api.getLinkedServerAwareTablePrefix(session, (destSession,))
         dbName = session._databaseName
         dbc = session.db()
         assert isinstance(dbc, db.Connection)
@@ -1058,7 +1055,7 @@ def verifyMerge(destSession, sourceSessions, output=sys.stdout):
         elif diff > 0:
             sign = '+'
         
-        row.append('%s%d' % (sign, total))
+        row.append('%s%d' % (sign, diff))
         
         rows.append(row)
     

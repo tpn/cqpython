@@ -474,10 +474,9 @@ def _mergeHistory(destSession, sourceSessions, dbidOffsets):
             Stateful  : ('(src.entity_dbid + %d)' % dbidOffset, False),
         }
         
-        columns = list(defaultColumns)
-        columns.append(('merge_orig_db', "'%s'" % srcDbName))
-        
         for (entityType, (column, joinAuxMap)) in entityTypes.items():
+            columns = list(defaultColumns)
+            columns.append(('merge_orig_db', "'%s'" % srcDbName))
             columns.append(('user_name', user % (27-len(srcDbName),srcDbName)))
             
             columns.append(('dbid', '(src.dbid + %d)' % dbidOffset))

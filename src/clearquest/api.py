@@ -4886,7 +4886,7 @@ class Session(CQObject):
     def getDynamicLists(self):
         return loadDynamicLists(self)
     
-    def setDynamicListValues(self, dynamicList):
+    def setDynamicList(self, dynamicList):
         """
         For the list identified by dynamicList.Name, mirror its values for the
         dynamic list with the same name in this session object.  Values are 
@@ -4906,7 +4906,7 @@ class Session(CQObject):
         
         return self.getDynamicList(name)
     
-    def mergeDynamicListValues(self, dynamicList):
+    def mergeDynamicList(self, dynamicList):
         """
         For the list identified by dynamicList.Name, add all the values that 
         aren't already present to the dynamic list with the same name in this
@@ -4923,12 +4923,11 @@ class Session(CQObject):
         
         return self.getDynamicList(name)
  
+    def setDynamicLists(self, dynamicLists):
+        return [ self.setDynamicList(dl) for dl in dynamicLists ]
     
-    def setMultipleDynamicListValues(self, dynamicLists):
-        return [ self.setDynamicListValues(dl) for dl in dynamicLists ]
-    
-    def mergeMultipleDynamicListValues(self, dynamicLists):
-        return [ self.mergeDynamicListValues(dl) for dl in dynamicLists ]
+    def mergeDynamicLists(self, dynamicLists):
+        return [ self.mergeDynamicList(dl) for dl in dynamicLists ]
     
     def executeQuery(self, sql):
         r = self.BuildSQLQuery(sql)

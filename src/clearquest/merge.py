@@ -1117,9 +1117,8 @@ def mergeDatabases(destSession, sourceSessions, **kwds):
     for sql in _mergeDatabases(destSession, sourceSessions, **kwds).split('GO'):
         dstDb.execute(str(sql))
         
-    destSession.mergeMultipleDynamicListValues([
-        s.getDynamicLists() for s in sourceSessions
-    ])
+    for session in sourceSessions:
+        destSession.mergeDynamicLists(session.getDynamicLists())
     
     mergePublicQueries(destSession, sourceSessions)
         

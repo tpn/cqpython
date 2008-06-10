@@ -10,6 +10,8 @@ import os
 import sys
 import itertools
 
+import cStringIO as StringIO
+
 from glob import iglob
 from tempfile import mkdtemp
 from subprocess import Popen, PIPE

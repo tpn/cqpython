@@ -938,7 +938,7 @@ def _finaliseDbGlobal(destSession, sourceSessions, dbidOffsets):
     sql = 'UPDATE %s.dbglobal SET next_request_id = %d, next_aux_id = %d'
     return sql % (prefix, last, last)
 
-def _verifySchemasMatch(destSession, sourceSession):
+def _verifySchemasMatch(destSession, sourceSessions):
     
     cols = (
         'metaschema_version',
@@ -972,7 +972,7 @@ def _mergeDatabases(destSession, sourceSessions, **kwds):
     args = (destSession, sourceSessions, dbidOffsets)
     
     if not allowMismatchedSchemas:
-        _verifySchemasMatch(destSession, sourceSession)
+        _verifySchemasMatch(destSession, sourceSessions)
     if not skipIntegrityCheck:
         [ fixDatabase(s) for s in chain((destSession,), sourceSessions) ]
     

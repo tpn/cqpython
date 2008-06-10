@@ -15,7 +15,7 @@ import cStringIO as StringIO
 
 from inspect import ismethod
 from functools import wraps
-from itertools import repeat
+from itertools import chain, repeat
 from subprocess import Popen, PIPE
 
 
@@ -137,6 +137,31 @@ def findFileInCQDir(file):
     if not os.path.isfile(path):
         raise RuntimeError("no such file: %s" % path)
     return path
+
+def renderTextTable(header, rows, output=sys.stdout):
+    headers = iterable(header)
+    cols = len(rows[0])
+    paddings = [ max((len(str(r[i])) for r in rows)) + 2 for i in xrange(cols) ]
+    formats = lambda: chain((str.ljust,), repeat(str.rjust))            
+    
+    length = sum(paddings) + cols
+    strip = '+%s+' % ('-' * (length-2))
+    banner = [ strip ] + \
+             [ '|%s|' % h.center(length-2) for h in headers ] + \
+             [ strip, '' ]
+    
+    output.write('\n'.join(banner))
+    output.write(\
+        '\n'.join([
+            '|'.join([
+                format(str(column), padding, fill)
+                    for (column, format, padding) in
+                        zip(row, formats(), paddings)
+            ])
+            for (row, fill) in
+                zip(rows, chain((' ', '_'), repeat(' ')))
+        ])
+    )
 
 #===============================================================================
 # Decorators

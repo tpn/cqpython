@@ -19,9 +19,11 @@ from subprocess import Popen, PIPE
 
 from clearquest import api, db
 from clearquest.task import Task, TaskManagerConfig, MultiSessionTaskManager
-from clearquest.util import connectStringToMap, joinPath, listToMap, unzip
+from clearquest.util import connectStringToMap, joinPath, listToMap, unzip, \
+                            renderTextTable
 from clearquest.tools import exportQueries, updateQueries
 from clearquest.constants import EntityType, FieldType, SessionClassType
+from clearquest.database.integrity import fixDatabase
 
 #===============================================================================
 # Globals
@@ -287,7 +289,7 @@ def __constructUserBucketSql(destSession, sourceSessions, sql, **kwds):
         k['srcPrefix'] = p
         k['dbDbIdColumn'] = _getDbIdColumn(session)
             
-        yield sql % k            
+        yield sql % k
         
 def _mergeEntity(destSession, sourceSession, entityDefName, dbidOffset):
     """
@@ -934,10 +936,16 @@ def _finaliseDbGlobal(destSession, sourceSessions, dbidOffsets):
     sql = 'UPDATE %s.dbglobal SET next_request_id = %d, next_aux_id = %d'
     return sql % (prefix, last, last)
         
-def _mergeDatabases(destSession, sourceSessions):
+def _mergeDatabases(destSession, sourceSessions, **kwds):
+    
+    skipAttachments = kwds.get('skipAttachments', False)
+    skipIntegrityCheck = kwds.get('skipIntegrityCheck', False)
     
     dbidOffsets = getDbIdOffsets(destSession, sourceSessions)
     args = (destSession, sourceSessions, dbidOffsets)
+    if not skipIntegrityCheck:
+        [ fixDatabase(s) for s in chain((destSession,), sourceSessions) ]
+    
     sql  = [
         _setPreMergeDatabaseOptions(*args),
         _prepareDatabaseForMerge(*args),
@@ -948,7 +956,10 @@ def _mergeDatabases(destSession, sourceSessions):
     sql += [ s for s in _mergeEntities(*args) ]
     sql += [ s for s in _mergeParentChildLinks(*args) ]
     sql += [ s for s in _mergeHistory(*args) ]
-    sql += [ s for s in _mergeAttachments(*args) ]
+    
+    if not skipAttachments:
+        sql += [ s for s in _mergeAttachments(*args) ]
+        
     sql += [ s for s in _mergeUserBuckets(*args) ]
     sql += [ s for s in _rebuildIndexes(*args) ]
     sql += [ 
@@ -958,6 +969,70 @@ def _mergeDatabases(destSession, sourceSessions):
     
     return '\nGO\n'.join(sql)
 
+def _getRowCounts(destSession, sourceSessions, targets):
+    actuals = dict()
+    expecteds = dict()
+    stmt = 'SELECT COUNT(*) FROM %s.%s %s'
+    userEntityDefId = None
+    groupsFieldDefId = None
+    dstPrefix = destSession.getTablePrefix()
+    srcDbNames = [ s._databaseName for s in sourceSessions ]
+    auxMapTable = '%s.%s' % (dstPrefix, __statelessDbIdMapTableName)
+    sessions = (destSession,) + sourceSessions
+    for target in targets:
+            
+        expected = None
+        where = ' WHERE dbid <> 0'
+        if isinstance(target, api.EntityDef):
+            targetName = target.GetName()
+            targetDbName = target.GetDbName()
+            if target.GetType() == Stateful or targetName == 'history':
+                expected = 0
+            elif targetName == 'ratl_replicas':
+                expected = -1
+        else:
+            expected = 0
+            if target == 'parent_child_links':
+                # Don't include user/groups
+                (userEntityDefId, groupsFieldDefId) =                      \
+                    destSession.db().selectAll(                            \
+                        "SELECT e.id, f.id FROM fielddef f, entitydef e "  \
+                        "WHERE e.name = 'users' AND f.name = 'groups' AND "\
+                        "f.entitydef_id = e.id")[0]
+                
+                where = "WHERE NOT (parent_entitydef_id = %d AND "             \
+                        "child_entitydef_id = %d AND "                         \
+                        "parent_fielddef_id = %d AND "                         \
+                        "child_fielddef_id = 0 AND "                           \
+                        "link_type_enum = 1)" %                                \
+                            (userEntityDefId,                                  \
+                             userEntityDefId,                                  \
+                             groupsFieldDefId)
+                
+            elif target == 'attachments_blob':
+                where = ''
+            targetName = targetDbName = target
+        
+        for session in sessions:
+            prefix = session.getTablePrefix()
+            dbName = session._databaseName
+            
+            dbc = session.db()
+            count = dbc.selectSingle(stmt % (prefix, targetDbName, where))
+            actuals.setdefault(dbName, dict())[targetName] = count
+            
+        if expected is None:
+            assert isinstance(target, api.EntityDef)
+            sql = 'SELECT DISTINCT COUNT(dbid) FROM %s WHERE entitydef_id = %d'\
+                  ' AND unique_key IS NOT NULL AND dbid <> 0'
+            unique = dbc.selectSingle(sql % (auxMapTable, target.id))
+            total = sum((actuals[n][targetName] for n in srcDbNames))
+            expected = unique - total
+            
+        expecteds[targetName] = expected
+            
+    return (actuals, expecteds)
+ 
 def verifyMerge(destSession, sourceSessions, output=sys.stdout):
     """
     Verifies the contents of a merged database by checking record counts and
@@ -984,68 +1059,25 @@ def verifyMerge(destSession, sourceSessions, output=sys.stdout):
               [ 'attachments', 'attachments_blob', 'parent_child_links' ]
     
     
-    counts = dict()
     dstPrefix = destSession.getTablePrefix()
-    simpleCountSql = 'SELECT COUNT(*) FROM %s.%s %s'
-    statelessCountSql = findSql('selectStatelessEntityCounts')
-    sessions = [ s for s in chain(sourceSessions, (destSession,)) ]
+    dstDbName = destSession._databaseName
     
-    for session in sessions:
-        prefix = api.getLinkedServerAwareTablePrefix(session, (destSession,))
-        dbName = session._databaseName
-        dbc = session.db()
-        assert isinstance(dbc, db.Connection)
-        
-        counts[dbName] = dict()
-        
-        for target in targets:
-            simple = True
-            where = ' WHERE dbid <> 0'
-            if isinstance(target, api.EntityDef):
-                targetName = target.GetName()
-                targetDbName = target.GetDbName()
-                if targetName != 'history' and          \
-                   target.GetType() == Stateless and    \
-                   session is not destSession:
-                    simple = False
-            else:
-                if target in ('parent_child_links', 'attachments_blob'):
-                    where = ''
-                targetName = targetDbName = target
-                
-            if simple:
-                sql = simpleCountSql % (prefix, targetDbName, where)
-                counts[dbName][targetName] = dbc.selectSingle(sql)            
-            else:
-            
-                otherDbIdColumns = [
-                    'm1.%s IS NULL' % _getDbIdColumn(s)
-                        for s in sessions
-                            if s not in (session, destSession)
-                ]
-                
-                sql = statelessCountSql % {
-                    'dstPrefix'        : dstPrefix,
-                    'entityDefId'      : target.id,
-                    'dbDbIdColumn'     : _getDbIdColumn(session),
-                    'otherDbIdColumns' : ' AND\n        '.join(otherDbIdColumns)
-                }
-                counts[dbName][targetName] = dbc.selectSingle(sql)
+    (actualCounts, expectedCounts) = \
+        _getRowCounts(destSession, sourceSessions, targets)
     
     rows = list()
-    
     for target in [ t if type(t) is str else t.GetName() for t in targets ]:
         total = 0
         row = list()
         row.append(target)
         
         for session in sourceSessions:
-            count = counts[session._databaseName][target]
+            count = actualCounts[session._databaseName][target]
             row.append(count)
             total += count 
         
         row.append(total)
-        actual = counts[destSession._databaseName][target]
+        actual = actualCounts[destSession._databaseName][target]
         row.append(actual)
         
         sign = '+'
@@ -1055,29 +1087,23 @@ def verifyMerge(destSession, sourceSessions, output=sys.stdout):
         
         row.append('%s%d' % (sign, diff))
         
+        expected = expectedCounts[target]
+        sign = '+' if expected > 0 else ''
+        row.append('%s%d' % (sign, expected))
+        
         rows.append(row)
-    
-    columnCount = len([s for s in sourceSessions]) + 3
-    paddings = [ p for p in chain((35,), repeat(11, columnCount)) ]
-    adjust = [ a for a in chain((str.ljust,), repeat(str.rjust, columnCount)) ]
-    
+        
     header = [ 'Target' ] + \
              [ s._databaseName for s in sourceSessions ] + \
-             [ 'Total', destSession._databaseName, 'Difference' ]
+             [ 'Total', dstDbName, 'Difference', 'Expected' ]
+    
     rows.insert(0, header)
     rows.insert(1, ('',) * len(header))
     
-    out = \
-        '\n'.join([
-            '|'.join([
-                format(str(column), padding, fill)
-                    for (column, format, padding) in zip(row, adjust, paddings)
-            ]) for (row, fill) in zip(rows, chain((' ', '_'), repeat(' ')))
-        ])
-    return out
+    header = ('[%s Database]' % dstDbName, 'Post-Merge Record Data Report')
+    renderTextTable(header, rows, output=output)
     
     
-        
 def _setPreMergeDatabaseOptions(destSession, *args):
     k = { 'dbName' : destSession.getPhysicalDatabaseName() }
     return str(findSql('setPreMergeDatabaseOptions') % k)
@@ -1086,10 +1112,11 @@ def _setPostMergeDatabaseOptions(destSession, *args):
     k = { 'dbName' : destSession.getPhysicalDatabaseName() }
     return (findSql('setPostMergeDatabaseOptions') % k)
     
-def mergeDatabases(destSession, sourceSessions):
+def mergeDatabases(destSession, sourceSessions, **kwds):
     dstDb = destSession.db()
-    sql = _mergeDatabases(destSession, sourceSessions)
-    
+    for sql in _mergeDatabases(destSession, sourceSessions, **kwds).split('GO'):
+        dstDb.execute(str(sql))
+        
     destSession.mergeMultipleDynamicListValues([
         s.getDynamicLists() for s in sourceSessions
     ])

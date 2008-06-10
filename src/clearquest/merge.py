@@ -345,7 +345,13 @@ def _mergeEntity(destSession, sourceSession, entityDefName, dbidOffset):
     
     dbColumns = entityDef.getFieldNameToDbColumnMap()
     
+    srcFieldNames = listToMap(sourceSession.GetEntityDef(entityDefName) \
+                                           .GetFieldDefNames())
+    
     for fieldName in entityDef.GetFieldDefNames():
+        
+        if fieldName not in srcFieldNames:
+            continue
         
         fieldType = entityDef.GetFieldDefType(fieldName)
         

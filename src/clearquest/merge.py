@@ -937,14 +937,42 @@ def _finaliseDbGlobal(destSession, sourceSessions, dbidOffsets):
     last = dbidOffsets[-1]
     sql = 'UPDATE %s.dbglobal SET next_request_id = %d, next_aux_id = %d'
     return sql % (prefix, last, last)
+
+def _verifySchemasMatch(destSession, sourceSession):
+    
+    cols = (
+        'metaschema_version',
+        'feature_level',
+        'schema_name',
+        'schema_id',
+        'schema_rev',
+        'schemarev_version'
+    )
+    sql = 'SELECT %s FROM %s.dbglobal' % (', '.join(cols), '%s')
+    prefix = destSession.getTablePrefix()
+    dstDbName = destSession._databaseName
+    expected = destSession.db().selectAll(sql % prefix)[0]
+    
+    for session in sourceSessions:
+        prefix = session.getTablePrefix()
+        actual = session.db().selectAll(sql % prefix)[0]
+        if actual != expected:
+            raise RuntimeError("mismatch between schema version being used by "\
+                               "%s and %s" % (dstDbName,
+                                              session._databaseName))
+                                              
         
 def _mergeDatabases(destSession, sourceSessions, **kwds):
     
     skipAttachments = kwds.get('skipAttachments', False)
     skipIntegrityCheck = kwds.get('skipIntegrityCheck', False)
+    allowMismatchedSchemas = kwds.get('allowMismatchedSchemas', False)
     
     dbidOffsets = getDbIdOffsets(destSession, sourceSessions)
     args = (destSession, sourceSessions, dbidOffsets)
+    
+    if not allowMismatchedSchemas:
+        _verifySchemasMatch(destSession, sourceSession)
     if not skipIntegrityCheck:
         [ fixDatabase(s) for s in chain((destSession,), sourceSessions) ]
     

@@ -451,10 +451,11 @@ def _mergeHistory(destSession, sourceSessions, dbidOffsets):
         ('old_state', 'src.old_state'),
         ('new_state', 'src.new_state'),
         ('action_name', 'src.action_name'),
-        ('ratl_keysite', str(dstReplicaId)),
+        ('ratl_keysite', 'NULL'),
         ('entitydef_id', 'src.entitydef_id'),
         ('entitydef_name', 'src.entitydef_name'),
-        ('ratl_mastership', str(dstReplicaId)),
+        ('merge_orig_dbid', 'src.dbid'),
+        ('ratl_mastership', 'NULL'),
         ('action_timestamp', 'src.action_timestamp'),
         ('expired_timestamp', 'src.expired_timestamp'),
     )
@@ -473,8 +474,10 @@ def _mergeHistory(destSession, sourceSessions, dbidOffsets):
             Stateful  : ('(src.entity_dbid + %d)' % dbidOffset, False),
         }
         
+        columns = list(defaultColumns)
+        columns.append(('merge_orig_db', "'%s'" % srcDbName))
+        
         for (entityType, (column, joinAuxMap)) in entityTypes.items():
-            columns = list(defaultColumns)
             columns.append(('user_name', user % (27-len(srcDbName),srcDbName)))
             
             columns.append(('dbid', '(src.dbid + %d)' % dbidOffset))
@@ -482,7 +485,7 @@ def _mergeHistory(destSession, sourceSessions, dbidOffsets):
             
             where = list()
             where.append('src.entitydef_id = e1.id')
-            where.append('e1.type = %d AND e1.is_family = 0' % entityType)
+            where.append('e1.type = %d' % entityType)
             
             srcTables = list()
             srcTables.append('%s.history src' % srcPrefix)

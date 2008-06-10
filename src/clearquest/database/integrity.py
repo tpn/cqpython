@@ -129,7 +129,7 @@ class DatabaseIntegrity(object):
         for entityDef in self.session.getAllEntityDefs():
             entityDefName = entityDef.GetName()
             
-            if entityDefName in ('history', 'ratl_replicas'):
+            if entityDefName in ('history', 'ratl_replicas', 'attachments'):
                 continue
             
             entityDefDbName = entityDef.GetDbName()

@@ -150,6 +150,7 @@ def renderTextTable(header, rows, output=sys.stdout):
              [ '|%s|' % h.center(length-2) for h in headers ] + \
              [ strip, '' ]
     
+    output.write('\n')
     output.write('\n'.join(banner))
     output.write(\
         '\n'.join([
@@ -162,6 +163,7 @@ def renderTextTable(header, rows, output=sys.stdout):
                 zip(rows, chain((' ', '_'), repeat(' ')))
         ])
     )
+    output.write('\n')
 
 #===============================================================================
 # Decorators

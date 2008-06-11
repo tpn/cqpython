@@ -1152,9 +1152,12 @@ def _setPostMergeDatabaseOptions(destSession, *args):
     return (findSql('setPostMergeDatabaseOptions') % k)
     
 def mergeDatabases(destSession, sourceSessions, **kwds):
-    dstDb = destSession.db()
-    for sql in _mergeDatabases(destSession, sourceSessions, **kwds).split('GO'):
-        dstDb.execute(str(sql))
+    con = destSession.db()
+    cur = con.cursor()
+    stmts = _mergeDatabases(destSession, sourceSessions, **kwds).split('GO')
+    for sql in stmts:
+        cur.execute(str(sql))
+        con.commit()
         
     for session in sourceSessions:
         destSession.mergeDynamicLists(session.getDynamicLists())

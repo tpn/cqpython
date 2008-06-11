@@ -972,12 +972,12 @@ def _mergeDatabases(destSession, sourceSessions, **kwds):
     
     skipAttachments = kwds.get('skipAttachments', False)
     skipIntegrityCheck = kwds.get('skipIntegrityCheck', False)
-    allowMismatchedSchemas = kwds.get('allowMismatchedSchemas', False)
+    enforceIdenticalSchemas = kwds.get('enforceIdenticalSchemas', False)
     
     dbidOffsets = getDbIdOffsets(destSession, sourceSessions)
     args = (destSession, sourceSessions, dbidOffsets)
     
-    if not allowMismatchedSchemas:
+    if enforceIdenticalSchemas:
         _verifySchemasMatch(destSession, sourceSessions)
     if not skipIntegrityCheck:
         [ fixDatabase(s) for s in chain((destSession,), sourceSessions) ]
@@ -1028,6 +1028,9 @@ def _mergeDatabases(destSession, sourceSessions, **kwds):
                 expected = -1
         else:
             expected = 0
+            # Meh, trying to account for parent_child_links is a nightmare.  At
+            # least, it's going to require more brain power to implement than I
+            # currently have to spare.
             if target == 'parent_child_links':
                 # Don't include user/groups
                 (userEntityDefId, groupsFieldDefId) =                      \
@@ -1157,6 +1160,8 @@ def mergeDatabases(destSession, sourceSessions, **kwds):
         destSession.mergeDynamicLists(session.getDynamicLists())
     
     mergePublicQueries(destSession, sourceSessions)
+    
+    verifyMerge(destSession, sourceSessions)
         
 def mergePublicQueries(destSession, sourceSessions):
     cwd = os.getcwd()

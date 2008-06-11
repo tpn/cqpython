@@ -12,7 +12,7 @@ import itertools
 
 from itertools import chain, repeat
 
-from clearquest.db import Connection
+from clearquest.db import CQDbConnection
 from clearquest.api import EntityDef, Session
 from clearquest.util import renderTextTable
 from clearquest.callback import Callback, ConsoleCallback
@@ -106,7 +106,7 @@ class DatabaseIntegrity(object):
         self.scope = scope
         self.output = output
         self.valid = False
-        self.db = Connection(session)
+        self.db = CQDbConnection(session)
         self.tablePrefix = session.getTablePrefix()
         
         self._processEntities()

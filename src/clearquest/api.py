@@ -1216,7 +1216,7 @@ class AdminSession(CQObject):
     
     @cache
     def db(self):
-        return db.Connection(self)
+        return db.CQDbConnection(self)
     
     def addUsers(self, users, **props):
         if not users.__class__ == Users:
@@ -4813,7 +4813,7 @@ class Session(CQObject):
 
     @cache
     def db(self):
-        return db.Connection(self)
+        return db.CQDbConnection(self)
     
     
 

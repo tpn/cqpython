@@ -175,20 +175,10 @@ def _sqlcmd(session, sql, stdout=PIPE, stderr=PIPE):
 #===============================================================================
 # Classes
 #===============================================================================
-                     
+
 class Connection(object):
-    def __init__(self, parent):
-        self._parent = parent
-        try:
-            self._databaseSet = parent._databaseSet
-            self._databaseName = parent._databaseName
-            self._connectString = parent.connectString()
-        
-        except AttributeError:
-            raise TypeError, "Unsupported parameter type for parent argument: "\
-                             "'%s'.  Supported types: api.Session, " \
-                             "api.AdminSession" % repr(parent)
-                            
+    def __init__(self, connectString):
+        self._connectString = connectString
         self._con = odbc.connect(self._connectString, autocommit=True)
     
     def _execute(self, sql, *args):
@@ -320,4 +310,34 @@ class Connection(object):
         
     def __getattr__(self, attr):
         return getattr(self._con, attr)
+    
+    def dropAllConstraints(self):
+        if self.getDatabaseVendor() == DatabaseVendor.SQLServer:
+            sql = "SELECT o.name, fk.name FROM sys.foreign_keys fk, "       \
+                  "sys.objects o WHERE fk.parent_object_id = o.object_id "  \
+                  "AND o.type = 'U'"
+            drop = "ALTER TABLE %s DROP CONSTRAINT %s"
+            for (key, table) in self.selectAll(sql):
+                self.execute(drop % (key, table))
+            self.commit()
+                             
+        else:
+            raise NotImplementedError    
+
+
+class CQDbConnection(Connection):
+    def __init__(self, parent):
+        self._parent = parent
+        try:
+            self._databaseSet = parent._databaseSet
+            self._databaseName = parent._databaseName
+            connectString = parent.connectString()
+        
+        except AttributeError:
+            raise TypeError, "Unsupported parameter type for parent argument: "\
+                             "'%s'.  Supported types: api.Session, " \
+                             "api.AdminSession" % repr(parent)
+
+        Connection.__init__(self, connectString)
+        
     

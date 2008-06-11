@@ -349,20 +349,24 @@ def _mergeEntity(destSession, sourceSession, entityDefName, dbidOffset):
                                            .GetFieldDefNames())
     
     for fieldName in entityDef.GetFieldDefNames():
-        
-        if fieldName not in srcFieldNames:
-            continue
-        
+                
         fieldType = entityDef.GetFieldDefType(fieldName)
         
         dst = dbColumns.get(fieldName)
         src = None
+
+        if fieldName not in srcFieldNames:
+            continue        
         
         if fieldName == __mergeDbField:
             src = "'%s'" % srcDbName
-            
+             
         elif fieldName == __mergeIdField:
-            src = 'src.id'
+            if entityDefType == Stateful:
+                src = 'src.id'
+            else:
+                # Ignore the 'merge_orig_id' field for stateless entities.
+                continue
         
         elif fieldName == __mergeDbIdField:
             src = 'src.dbid'
@@ -534,6 +538,14 @@ def _mergeParentChildLinks(destSession, sourceSessions, dbidOffsets):
    
     _decodeOffset = _getOffsetDecoder(destSession)
     
+    dstTablePrefix = destSession.getTablePrefix()
+    
+    yield findSql('addMergeDbColumnToParentChildLinks', **{
+        'dstTablePrefix' : dstTablePrefix,
+        'mergeDbField'   : __mergeDbField.lower(),
+        'dstDbName'      : destSession.connectStringToMap()['DB'],
+    })
+    
     for sourceSession in sourceSessions:
         
         dbidOffset = offsets.next()
@@ -594,12 +606,14 @@ def _mergeParentChildLinks(destSession, sourceSessions, dbidOffsets):
             dstColumns.append('link_type_enum')
             srcColumns.append('1')
             
+            dstColumns.append(__mergeDbField)
+            srcColumns.append("'%s'" % sourceSession._databaseName)
+            
             if linkType not in ((Stateless, Stateless), (User, Group)):
                 exclude['exclude'] = False
                 
             args = (sourceSession, (destSession,))
             srcTablePrefix = api.getLinkedServerAwareTablePrefix(*args)
-            dstTablePrefix = destSession.getTablePrefix()
             
             srcTables = list()
             srcTables.append('%s.parent_child_links src' % srcTablePrefix)
@@ -967,7 +981,6 @@ def _verifySchemasMatch(destSession, sourceSessions):
                                "%s and %s" % (dstDbName,
                                               session._databaseName))
                                               
-        
 def _mergeDatabases(destSession, sourceSessions, **kwds):
     
     skipAttachments = kwds.get('skipAttachments', False)

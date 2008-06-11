@@ -1152,19 +1152,37 @@ def _setPostMergeDatabaseOptions(destSession, *args):
     return (findSql('setPostMergeDatabaseOptions') % k)
     
 def mergeDatabases(destSession, sourceSessions, **kwds):
-    con = destSession.db()
-    cur = con.cursor()
+    
+    dstDb = destSession.db()
+    
     stmts = _mergeDatabases(destSession, sourceSessions, **kwds).split('GO')
+    progress = itertools.count(0)
+    expected = len(stmts)
+    completion = 0
+    blank = '\b' * 50
+    
+    write = sys.stdout.write
+    write('\n')
     for sql in stmts:
-        cur.execute(str(sql))
-        con.commit()
+        dstDb.execute(str(sql))
+        dstDb.commit()
+        completion = (float(progress.next())/float(expected)) * 100.0
+        write('%sprogress: %d%%' % (blank, completion))
         
+    write('\ndata merge complete!\n')
+    
+    write('merging dynamic lists...')    
     for session in sourceSessions:
         destSession.mergeDynamicLists(session.getDynamicLists())
-    
+    write('done\n')    
+        
+    write('merging public queries...')
     mergePublicQueries(destSession, sourceSessions)
+    write('done\n')
     
+    write('verifying merge...')
     verifyMerge(destSession, sourceSessions)
+    write('done\n')
         
 def mergePublicQueries(destSession, sourceSessions):
     cwd = os.getcwd()

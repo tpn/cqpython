@@ -986,8 +986,10 @@ def _mergeDatabases(destSession, sourceSessions, **kwds):
     skipAttachments = kwds.get('skipAttachments', False)
     skipIntegrityCheck = kwds.get('skipIntegrityCheck', False)
     enforceIdenticalSchemas = kwds.get('enforceIdenticalSchemas', False)
-    
-    dbidOffsets = getDbIdOffsets(destSession, sourceSessions)
+    dbidOffsets = kwds.get('dbidOffsets')
+    if not dbidOffsets:
+        dbidOffsets = getDbIdOffsets(destSession, sourceSessions)
+        
     args = (destSession, sourceSessions, dbidOffsets)
     
     if enforceIdenticalSchemas:
@@ -997,7 +999,7 @@ def _mergeDatabases(destSession, sourceSessions, **kwds):
     
     sql  = [
         _setPreMergeDatabaseOptions(*args),
-        _prepareDatabaseForMerge(*args),
+        _prepareDatabaseForMerge(*args, **kwds),
         _createStatelessDbIdMap(*args),
         _createUserBucketMap(*args),
     ]
@@ -1208,7 +1210,7 @@ def mergePublicQueries(destSession, sourceSessions):
     
 class DatabaseNotEmptyError(Exception): pass
 
-def _prepareDatabaseForMerge(destSession, *args):
+def _prepareDatabaseForMerge(destSession, *args, **kwds):
     """
     Deletes all rows (except for where dbid == 0) in the following tables:
     parent_child_links, users, groups, bucket, user_blob.
@@ -1217,8 +1219,10 @@ def _prepareDatabaseForMerge(destSession, *args):
     # This method should only be run against sessions for databases that have
     # been newly created from Designer, which we can verify by seeing if there
     # are any entities present.
-    if getMaxStatefulEntityDbIds((destSession,)).next() != 0:
-        raise DatabaseNotEmptyError()
+    enforceEmptyDestDatabase = kwds.get('enforceEmptyDestDatabase', True)
+    if enforceEmptyDestDatabase:
+        if getMaxStatefulEntityDbIds((destSession,)).next() != 0:
+            raise DatabaseNotEmptyError()
     
     kwds = { 'dstPrefix' : destSession.getTablePrefix() }
     return findSql('prepareDatabaseForMerge', **kwds)

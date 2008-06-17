@@ -272,6 +272,7 @@ class CQObject(DispatchBaseClass):
         self.__dict__['trait_names'] = lambda: props
         self.__dict__['xmlFileName'] = self.__class__.__name__ + '.xml'
         self.__dict__['api'] = sys.modules[self.__class__.__module__]
+        self.__dict__['_XmlLoader'] = _XmlLoader
         if not args and self.__class__.__name__ in self._TopLevelObjects:
             args = (pythoncom.new(self.coclass_clsid),)
         DispatchBaseClass.__init__(self, *args)
@@ -351,7 +352,7 @@ class CQObject(DispatchBaseClass):
         elif property[:2] == 'Is' and hasattr(self, 'Set' + property[2:]):
             return lambda v: getattr(self, 'Set' + property[2:])(v)
         else:
-            raise ValueError, "property '%s' not recognised for object '%s'" \
+            raise ValueError, "property '%s' not recognised for object '%s'" % \
                               (property, self.__class__.__name__)
     
     def __getattr__(self, attr):

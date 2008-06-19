@@ -1192,19 +1192,20 @@ def mergeDatabases(destSession, sourceSessions, **kwds):
     write('done\n')    
         
     write('merging public queries...')
-    mergePublicQueries(destSession, sourceSessions)
+    mergePublicQueries(destSession, sourceSessions, **kwds)
     write('done\n')
     
     write('verifying merge...')
     verifyMerge(destSession, sourceSessions)
     write('done\n')
         
-def mergePublicQueries(destSession, sourceSessions):
+def mergePublicQueries(destSession, sourceSessions, **kwds):
+    reuseExportedQueries = kwds.get('reuseExportedQueries', False)
     cwd = os.getcwd()
     for session in sourceSessions:
         name = session._databaseName
         path = '%s-queries.bkt' % name
-        if not os.path.isfile(joinPath(cwd, path)):
+        if not (reuseExportedQueries and os.path.isfile(joinPath(cwd, path))):
             exportQueries(session, path)
         updateQueries(destSession, path)
     

@@ -931,7 +931,7 @@ def _disableIndexes(destSession, *args):
         if __useClusteredIndexes:
             for i in __getClusteredIndexes(destSession):
                 yield 'CREATE UNIQUE CLUSTERED INDEX %s ON %s (dbid) ' \
-                      'WITH (DROP_EXISTING = ON, FILL_FACTOR = %d)' %  \
+                      'WITH (DROP_EXISTING = ON, FILLFACTOR = %d)' %  \
                         tuple(chain(i, (__defaultFillFactor,)))
             
         else:

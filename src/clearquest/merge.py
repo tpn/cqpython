@@ -1177,12 +1177,18 @@ def mergeDatabases(destSession, sourceSessions, **kwds):
     blank = '\b' * 50
     
     write = sys.stdout.write
+    log = open(joinPath(os.getcwd(), 'merge.sql'), 'w')
+    write('\nwriting SQL to %s\n' % os.path.abspath(log.name))
     write('\n')
     for sql in stmts:
-        dstDb.execute(str(sql))
+        stmt = str(sql)
+        log.write('%s\nGO' % stmt)
+        dstDb.execute(stmt)
         dstDb.commit()
         completion = (float(progress.next())/float(expected)) * 100.0
         write('%sprogress: %d%%' % (blank, completion))
+        
+    log.close()
         
     write('\ndata merge complete!\n')
     

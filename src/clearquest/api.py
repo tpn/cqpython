@@ -492,7 +492,7 @@ class CQProxyObject(object):
             self._proxiedFields.keys()  + \
             self._proxiedSymbols.keys() + \
             self._behaviourSymbols.keys()
-            
+        
     def trait_names(self):
         return self._symbols
         
@@ -526,7 +526,10 @@ class CQProxyObject(object):
         elif attr in self._proxiedFields or hasattr(self._behaviour, attr):
             return getattr(self._behaviour, attr)
         elif attr in self._proxiedSymbols:
-            return getattr(self._proxiedObject, attr)
+            try:
+                return getattr(self._proxiedObject, attr)
+            except AttributeError:
+                return self.resolveSymbol(attr)
         else:
             raise AttributeError, "unknown attribute: %s" % attr
         
@@ -535,6 +538,9 @@ class CQProxyObject(object):
             object.__setattr__(self, attr, value)
         else:
             setattr(self._behaviour, attr, value)
+            
+    def resolveSymbol(self, symbol):
+        raise NotImplementedError
     
 class SchemaObjectProxy(CQProxyObject):
     def __init__(self, proxiedObject, behaviourType, *args, **kwds):
@@ -562,9 +568,31 @@ class SchemaObjectProxy(CQProxyObject):
 class EntityProxy(CQProxyObject):
     def __init__(self, proxiedObject, behaviourType, *args, **kwds):
         CQProxyObject.__init__(self, proxiedObject, behaviourType, *args,**kwds)
+        session = proxiedObject.session
+        entityDef = session.GetEntityDef(proxiedObject.GetEntityDefName())
+        actions = entityDef.GetActionDefNames()
+        self._symbols += actions
+        self._actions = listToMap(actions)
+        self._proxiedSymbols.update(self._actions)
     
     def getProxiedFields(self):
         return self._proxiedObject.GetFieldNames()
+    
+    def resolveSymbol(self, symbol):
+        if not symbol in self._actions:
+            raise AttributeError("unknown attribute: '%s'" % symbol)
+        if self._behaviourType == ReadOnlyBehaviour:
+            def _raiseErrorOnCall():
+                raise RuntimeError("error invoking action '%s': object is " \
+                                   "read-only" % symbol)
+            return _raiseErrorOnCall
+        else:
+            def _editEntityCallable():
+                self.session.EditEntity(self._proxiedObject, symbol)
+                return self
+            
+            return _editEntityCallable
+        
     
     def get(self, field):
         return self._proxiedObject.get(field)
@@ -640,7 +668,7 @@ class DeferredWriteBehaviour(object):
     def applyChanges(self, changes=dict()):
         self.addChanges(changes)
         changes = self.getChanges()
-        if not changes:
+        if not changes and not self._proxiedObject.IsEditable():
             return False
         
         self.preApplyChanges()
@@ -851,23 +879,127 @@ class UniqueKey(object):
         return 'SELECT %s FROM %s WHERE %s AND %s = ' % \
                 (kwds.get('select', displayNameSql), joins, where,
                  kwds.get('where', displayNameSql)) + '?'
+    
+class _DynamicListSynchronisationPolicy(CQConstant):
+    """
+    Always re-synchronise our values with the session before and after any
+    calls to add() or remove().
+    """
+    Strict = 1
+    
+    """
+    Only synchronise after add() or remove() has been called, which ensures we
+    pick up any changes that may have been introduced by other sessions.
+    """
+    Relaxed = 2
+    
+    """
+    Don't do any synchronisation; assumes that no-one else will be modifying
+    the dynamic list values during our lifetime.
+    """
+    Never = 3
+DynamicListSynchronisationPolicy = _DynamicListSynchronisationPolicy()
 
 class DynamicList(object):
+    # XXX TODO: the add() and remove() methods alter our state.  We should 
+    # probably provide support for a synchronous-esque DynamicList that auto-
+    # matically resyncs the values it has for self.values before each state
+    # change.  Perhaps a SynchronisedDynamicList class.
     _xmlTemplate =  MarkupTemplate(                                            \
         '<DynamicList %s py:attrs="ns" Name="${this.Name}">'                   \
             '<Value py:for="v in this">${v}</Value>'                           \
         '</DynamicList>' % GenshiXmlNamespace)
            
-    def __init__(self, name, values):
+    def __init__(self, name, values=list(), session=None,
+                 policy=DynamicListSynchronisationPolicy.Never):
+        # I assume I had a good reason for using an uppercase N for Name here.
+        # However, I've since forgotten what that reason is, and it's ugly,
+        # so provide self.name as well.
         self.Name = name
-        self.values = iterable(values)
+        self.name = name
+        self.policy = policy
+        if isinstance(session, Session):
+            self.session = session
+            self.values = list(iterable(session.GetListMembers(name)))
+        else:
+            if not self._noSyncPolicy():
+                raise RuntimeError("The only supported policy when no session "\
+                                   "has been provided is 'Never'")
+            self.values = list(iterable(values))
         
     def __len__(self):
         return len(self.values)
     
     def __getitem__(self, index):
         return self.values[index]
+    
+    def _sync(self):
+        if hasattr(self, 'session'):
+            self.values = list(self.session.GetListMembers(self.name))
+            
+    def _strictSyncPolicy(self):
+        return self.policy == DynamicListSynchronisationPolicy.Strict
         
+    def _relaxedSyncPolicy(self):
+        return self.policy == DynamicListSynchronisationPolicy.Relaxed
+    
+    def _noSyncPolicy(self):
+        return self.policy == DynamicListSynchronisationPolicy.Never
+        
+    def add(self, value):
+        for value in iterable(value):
+            value = unicode(value)
+            if self._strictSyncPolicy():
+                self._sync()
+                
+            if value not in self.values:
+                self.session.AddListMember(self.name, value)
+                if not self._noSyncPolicy():
+                    self._sync()
+                else:
+                    self.values.append(value)
+
+    def __add__(self, value):
+        self.add(value)
+        return self
+    
+    def remove(self, value):
+        for value in iterable(value):
+            value = unicode(value)
+            if self._strictSyncPolicy():
+                self._sync()
+                
+            if value not in self.values:
+                raise ValueError("value '%s' not present in list '%s'" % \
+                                 (value, self.name))
+            
+            self.session.DeleteListMember(self.name, value)
+            if not self._noSyncPolicy():
+                self._sync()
+            else:
+                self.values.remove(value)
+                
+    def sort(self):
+        values = list(self.values)
+        values.sort()
+        self.clear()
+        self.update(values)
+            
+    def clear(self):
+        values = tuple(self.values)
+        [ self.remove(value) for value in values ]
+        
+    def set(self, values):
+        [ self.remove(value) for value in self.values if value not in values ]
+        [ self.add(value) for value in values ]
+        
+    def update(self, values):
+        [ self.add(value) for value in values ]
+    
+    def __sub__(self, value):
+        self.remove(value)
+        return self
+            
     def __iter__(self):
         return iter(self.values)
         
@@ -901,8 +1033,7 @@ class DynamicLists(object):
     
 def loadDynamicList(name, obj):
     if isinstance(obj, Session):
-        values = obj.GetListMembers(name)
-        return DynamicList(name, values)
+        return DynamicList(name, session=obj)
     
     if isinstance(obj, (str, unicode)):
         xml = XML(open(obj, 'r').read())
@@ -923,7 +1054,7 @@ def loadDynamicList(name, obj):
 def loadDynamicLists(obj):
     if isinstance(obj, Session):
         return DynamicLists([
-            DynamicList(name, obj.GetListMembers(name))
+            DynamicList(name, session=obj)
                 for name in obj.GetListDefNames()
         ]) 
     

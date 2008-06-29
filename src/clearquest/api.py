@@ -5027,10 +5027,12 @@ class Session(CQObject):
         @returns: the affected C{DynamicList} of this session object.
         """
         name = dynamicList.Name
-        old = self.GetListMembers(name) or tuple()
         new = tuple([ unicode(v) for v in dynamicList.values ])
         
-        for value in [ n for n in new if not n in old ]:
+        old = self.GetListMembers(name) or tuple()
+        old = listToMap([ o.lower() for o in old ])
+        
+        for value in [ n for n in new if not n.lower() in old ]:
             self.AddListMember(name, value)
         
         for value in [ o for o in old if not o in new ]:
@@ -5047,13 +5049,15 @@ class Session(CQObject):
         @returns: the affected C{DynamicList} of this session object. 
         """
         name = dynamicList.Name
-        old = self.GetListMembers(name) or tuple()
         new = tuple([ unicode(v) for v in dynamicList.values ])
         
-        for value in [ n for n in new if not n in old ]:
+        old = self.GetListMembers(name) or tuple()
+        old = listToMap([ o.lower() for o in old ])
+        
+        for value in [ n for n in new if not n.lower() in old ]:
             self.AddListMember(name, value)
         
-        return self.getDynamicList(name)
+        return self.getDynamicList(name)            
  
     def setDynamicLists(self, dynamicLists):
         return [ self.setDynamicList(dl) for dl in dynamicLists ]

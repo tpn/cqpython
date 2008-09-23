@@ -4989,7 +4989,7 @@ class Session(CQObject):
         """
         entityDef = self.GetEntityDef(entityDefName)
         
-        fields = [ f[0] for f in entityDef.getUniqueKey().fields() ]
+        fields = [ f[0] for f in entityDef.getUniqueKey().selectFields() ]
         if len(fields) == 1:
             parts = (displayName,)
         else:
@@ -5016,18 +5016,22 @@ class Session(CQObject):
         return loadDynamicList(name, self)
     
     def getDynamicLists(self):
-        return loadDynamicLists(self)
-    
+        return loadDynamicLists(self)    
+   
     def setDynamicList(self, dynamicList):
         """
-        For the list identified by dynamicList.Name, mirror its values for the
+        For the list identified by dynamicList.name, mirror its values for the
         dynamic list with the same name in this session object.  Values are 
         added and deleted as necessary.
         @param dynamicList: C{DynamicList}
         @returns: the affected C{DynamicList} of this session object.
         """
-        name = dynamicList.Name
-        new = tuple([ unicode(v) for v in dynamicList.values ])
+        return self.setDynamicListValues(dynamicList.name, dynamicList.values)
+    
+    def setDynamicListValues(self, name, values):
+        """
+        """
+        new = tuple([ unicode(v) for v in values ])
         
         old = self.GetListMembers(name) or tuple()
         old = listToMap([ o.lower() for o in old ])
@@ -5038,7 +5042,7 @@ class Session(CQObject):
         for value in [ o for o in old if not o in new ]:
             self.DeleteListMember(name, value)
         
-        return self.getDynamicList(name)
+        return self.getDynamicList(name)    
     
     def mergeDynamicList(self, dynamicList):
         """

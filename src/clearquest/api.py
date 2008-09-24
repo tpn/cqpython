@@ -639,6 +639,7 @@ class DeferredWriteBehaviour(object):
         self._proxiedObject = parent._proxiedObject
         self._proxiedFields = parent._proxiedFields
         self._changes = dict(**kwds.get('changes', {}))
+        self._order = list(**kwds.get('order', []))
         
     def preApplyChanges(self):
         pass
@@ -655,7 +656,7 @@ class DeferredWriteBehaviour(object):
             
     def getChanges(self):
         changes = []
-        for field, value in self._changes.items():
+        for field, value in ((f, self._changes[f]) for f in self._order):
             existing = self._parent.get(field)
             if type(existing) == tuple:
                 existing = list(existing)
@@ -672,7 +673,8 @@ class DeferredWriteBehaviour(object):
             return False
         
         self.preApplyChanges()
-        for field, value in changes:
+        changeset = ((f, changes[f]) for f in self._order if f in changes):
+        for field, value in changeset:
             self._parent.set(field, value)
         self.postApplyChanges()
         
@@ -713,6 +715,7 @@ class DeferredWriteBehaviour(object):
         if attr.startswith('_') or not attr in self._proxiedFields:
             object.__setattr__(self, attr, value)
         else:
+            self._order.append(attr)
             self._changes[attr] = value
 
 class DeferredWriteEntityBehaviour(DeferredWriteBehaviour):

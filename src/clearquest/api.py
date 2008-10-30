@@ -638,8 +638,8 @@ class DeferredWriteBehaviour(object):
         self._parent = parent
         self._proxiedObject = parent._proxiedObject
         self._proxiedFields = parent._proxiedFields
-        self._changes = dict(**kwds.get('changes', {}))
-        self._order = list(**kwds.get('order', []))
+        self._changes = kwds.get('changes', {})
+        self._order = kwds.get('order', [])
         
     def preApplyChanges(self):
         pass
@@ -673,8 +673,7 @@ class DeferredWriteBehaviour(object):
             return False
         
         self.preApplyChanges()
-        changeset = ((f, changes[f]) for f in self._order if f in changes):
-        for field, value in changeset:
+        for field, value in changes:
             self._parent.set(field, value)
         self.postApplyChanges()
         
@@ -2197,7 +2196,7 @@ class Entity(CQObject):
         self.session.EditEntity(self, action)
     
     def commit(self):
-        self.Validate()
+        # self.Validate()
         self.Commit()
         for task in self._postCommitTasks:
             task(self)

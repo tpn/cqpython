@@ -127,16 +127,24 @@ def addWorkspaceItemNature(object=None, **kwds):
     if not 'dbid' in k and object.__class__ == Folder:
         k['dbid'] = object.GetDbId()
     
-    dbid = k['dbid']
-    ws = k['workspace']
-    
-    args = (dbid, WorkspaceNameOption.NotExtended)
-    k['Name'] = ws.GetWorkspaceItemName(*args)
-    k['Type'] = ws.GetWorkspaceItemType(dbid)
-    k['PathName'] = "/".join(ws.GetWorkspaceItemPathName(*args))
-    k['MasterReplicaName'] = ws.GetWorkspaceItemMasterReplicaName(dbid)
-    k['SiteExtendedName'] = ws.GetWorkspaceItemSiteExtendedName(dbid)
-    k['SiteExtendedNameRequired'] = ws.SiteExtendedNameRequired(dbid)
+    # If we don't have dbid *or* workspace available, we can't have a workspace
+    # nature attached to us.  This will be the case for objects we create via
+    # the API, i.e. creating queries via BuildQuery.  Once we've created the
+    # query, we can re-fetch it and the 'dbid' and 'workspace' properties will
+    # be available.
+    try:
+        dbid = k['dbid']
+        ws = k['workspace']
+    except KeyError:
+        pass
+    else:
+        args = (dbid, WorkspaceNameOption.NotExtended)
+        k['Name'] = ws.GetWorkspaceItemName(*args)
+        k['Type'] = ws.GetWorkspaceItemType(dbid)
+        k['PathName'] = "/".join(ws.GetWorkspaceItemPathName(*args))
+        k['MasterReplicaName'] = ws.GetWorkspaceItemMasterReplicaName(dbid)
+        k['SiteExtendedName'] = ws.GetWorkspaceItemSiteExtendedName(dbid)
+        k['SiteExtendedNameRequired'] = ws.SiteExtendedNameRequired(dbid)
     
     if object is None:
         return k

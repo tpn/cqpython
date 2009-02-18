@@ -649,6 +649,14 @@ class DeferredWriteBehaviour(object):
         self._changes = kwds.get('changes', {})
         self._order = kwds.get('order', [])
         
+    def resetChanges(self):
+        """
+        Clear any changes that have been scheduled for this object.  Called
+        automatically via applyChanges().
+        """
+        self._changes = {}
+        self._order = []
+        
     def preApplyChanges(self):
         pass
 
@@ -684,7 +692,7 @@ class DeferredWriteBehaviour(object):
         for field, value in changes:
             self._parent.set(field, value)
         self.postApplyChanges()
-        
+        self.resetChanges()
         return True
         
     def applyChangesAndCommit(self, changes=dict()):
@@ -701,6 +709,7 @@ class DeferredWriteBehaviour(object):
         if changesApplied:
             self._parent.commit()
         self.postCommit(changesApplied)
+        
         return changesApplied
 
     def save(self):

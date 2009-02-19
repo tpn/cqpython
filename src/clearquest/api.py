@@ -2290,10 +2290,15 @@ class EntityDef(CQObject):
     def __init__(self, *args, **kwds):
         CQObject.__init__(self, *args, **kwds)
         
-        self.__dict__.update(self.session.db().selectAllAsDict(
-            "SELECT * FROM entitydef WHERE name = ?",
-            self.GetName())[0]
-        )
+        # Temporary workaround until we extend session.db() to work with the
+        # CQ API in absence of super-user privs (which are required to get the
+        # connect string, which is required to create the database connection
+        # returned by session.db()).
+        if self.session.IsUserSuperUser():
+            self.__dict__.update(self.session.db().selectAllAsDict(
+                "SELECT * FROM entitydef WHERE name = ?",
+                self.GetName())[0]
+            )
 
     def CanBeSecurityContext(self):
         return self._oleobj_.InvokeTypes(22, LCID, 1, (11, 0), (),)

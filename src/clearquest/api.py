@@ -2204,6 +2204,15 @@ class Entity(CQObject):
         
     def setReadOnly(self, field):
         self.SetFieldRequirednessForCurrentAction(field, Behavior.ReadOnly)
+        
+    def isMandatory(self, field):
+        return self.GetFieldRequiredness(field) == Behavior.Mandatory
+    
+    def isOptional(self, field):
+        return self.GetFieldRequiredness(field) == Behavior.Optional
+    
+    def isReadOnly(self, field):
+        return self.GetFieldRequiredness(field) == Behavior.ReadOnly
     
     @cache
     def getProxy(self, behaviourType=NormalBehaviour):

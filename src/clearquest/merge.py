@@ -649,6 +649,7 @@ def _mergeAttachments(destSession, sourceSessions, dbidOffsets):
     dstPrefix = destSession.getTablePrefix()
     auxMapTable = '%s.%s' % (dstPrefix, __statelessDbIdMapTableName)
 
+    # XXX TODO: add support for merge old dbid and db fields.
     defaultColumns = (
         ('filename', 'src.filename'),
         ('filesize', 'src.filesize'),
